@@ -5,7 +5,6 @@ use std::fs;
 use std::fs::DirEntry;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
-use std::ops::Deref;
 
 use gio;
 use gio::prelude::*;
@@ -36,21 +35,12 @@ struct State {
     selected_path: Option<String>,
 }
 
-pub struct FileBrowserWidget {
+pub struct FileBrowser {
     store: gtk::TreeStore,
     tree: gtk::TreeView,
-    widget: gtk::Box,
     nvim: Option<Rc<NeovimClient>>,
     comps: Components,
     state: Rc<RefCell<State>>,
-}
-
-impl Deref for FileBrowserWidget {
-    type Target = gtk::Box;
-
-    fn deref(&self) -> &gtk::Box {
-        &self.widget
-    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -67,10 +57,8 @@ enum Column {
     IconName,
 }
 
-impl FileBrowserWidget {
-    pub fn new() -> Self {
-        let builder = gtk::Builder::new_from_string(include_str!("../resources/side-panel.ui"));
-        let widget: gtk::Box = builder.get_object("file_browser").unwrap();
+impl FileBrowser {
+    pub fn new(builder: &gtk::Builder) -> Self {
         let tree: gtk::TreeView = builder.get_object("file_browser_tree_view").unwrap();
         let store: gtk::TreeStore = builder.get_object("file_browser_tree_store").unwrap();
         let dir_list_model: gtk::TreeStore = builder.get_object("dir_list_model").unwrap();
@@ -80,10 +68,9 @@ impl FileBrowserWidget {
             .get_object("file_browser_show_hidden_checkbox")
             .unwrap();
 
-        let file_browser = FileBrowserWidget {
+        let file_browser = FileBrowser {
             store,
             tree,
-            widget,
             nvim: None,
             comps: Components {
                 dir_list_model,

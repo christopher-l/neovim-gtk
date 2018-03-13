@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.20.4 -->
 <interface>
-  <requires lib="gtk+" version="3.8"/>
+  <requires lib="gtk+" version="3.16"/>
   <object class="GtkTreeStore" id="dir_list_model">
     <columns>
       <!-- column-name dir_name -->
@@ -57,7 +57,7 @@
       <column type="gchararray"/>
     </columns>
   </object>
-  <object class="GtkBox" id="file_browser">
+  <object class="GtkBox" id="side_panel">
     <property name="width_request">150</property>
     <property name="can_focus">False</property>
     <property name="orientation">vertical</property>
@@ -93,39 +93,184 @@
       </packing>
     </child>
     <child>
-      <object class="GtkScrolledWindow">
+      <object class="GtkPaned">
+        <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
         <child>
-          <object class="GtkTreeView" id="file_browser_tree_view">
+          <object class="GtkBox">
+            <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="model">file_browser_tree_store</property>
-            <property name="headers_visible">False</property>
-            <property name="show_expanders">False</property>
-            <property name="level_indentation">20</property>
-            <property name="activate_on_single_click">True</property>
-            <child internal-child="selection">
-              <object class="GtkTreeSelection"/>
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="can_focus">False</property>
+                <property name="margin_left">6</property>
+                <property name="label" translatable="yes">Buffers</property>
+                <property name="xalign">0</property>
+                <attributes>
+                  <attribute name="weight" value="semibold"/>
+                  <attribute name="scale" value="0.90000000000000002"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
             </child>
             <child>
-              <object class="GtkTreeViewColumn">
-                <property name="sizing">autosize</property>
+              <object class="GtkScrolledWindow">
+                <property name="can_focus">False</property>
                 <child>
-                  <object class="GtkCellRendererPixbuf">
-                    <property name="xpad">6</property>
+                  <object class="GtkViewport">
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkListBox" id="buffer_list">
+                        <property name="can_focus">False</property>
+                        <child>
+                          <object class="GtkListBoxRow">
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                                <property name="margin_top">2</property>
+                                <property name="margin_bottom">2</property>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="can_focus">False</property>
+                                    <property name="margin_left">6</property>
+                                    <property name="margin_right">6</property>
+                                    <property name="icon_name">text-x-generic-symbolic</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">0</property>
+                                  </packing>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="visible">True</property>
+                                    <property name="can_focus">False</property>
+                                    <property name="label" translatable="yes">buffer_name.ext</property>
+                                    <property name="xalign">0</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">True</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">1</property>
+                                  </packing>
+                                </child>
+                                <child>
+                                  <object class="GtkImage">
+                                    <property name="visible">True</property>
+                                    <property name="can_focus">False</property>
+                                    <property name="margin_left">6</property>
+                                    <property name="margin_right">6</property>
+                                    <property name="icon_name">window-close-symbolic</property>
+                                    <property name="icon_size">1</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">2</property>
+                                  </packing>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
-                  <attributes>
-                    <attribute name="icon-name">3</attribute>
-                  </attributes>
-                </child>
-                <child>
-                  <object class="GtkCellRendererText"/>
-                  <attributes>
-                    <attribute name="text">0</attribute>
-                  </attributes>
                 </child>
               </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
             </child>
           </object>
+          <packing>
+            <property name="resize">False</property>
+            <property name="shrink">False</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="margin_top">6</property>
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="margin_left">6</property>
+                <property name="label" translatable="yes">File Tree</property>
+                <property name="xalign">0</property>
+                <attributes>
+                  <attribute name="weight" value="semibold"/>
+                  <attribute name="scale" value="0.90000000000000002"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkScrolledWindow">
+                <property name="can_focus">False</property>
+                <child>
+                  <object class="GtkTreeView" id="file_browser_tree_view">
+                    <property name="can_focus">False</property>
+                    <property name="model">file_browser_tree_store</property>
+                    <property name="headers_visible">False</property>
+                    <property name="search_column">0</property>
+                    <property name="show_expanders">False</property>
+                    <property name="level_indentation">20</property>
+                    <property name="activate_on_single_click">True</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection"/>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn">
+                        <property name="sizing">autosize</property>
+                        <child>
+                          <object class="GtkCellRendererPixbuf">
+                            <property name="xpad">6</property>
+                          </object>
+                          <attributes>
+                            <attribute name="icon-name">3</attribute>
+                          </attributes>
+                        </child>
+                        <child>
+                          <object class="GtkCellRendererText"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="resize">True</property>
+            <property name="shrink">True</property>
+          </packing>
         </child>
       </object>
       <packing>

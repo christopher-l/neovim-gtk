@@ -17,7 +17,7 @@ use shell::{self, Shell, ShellOptions};
 use shell_dlg;
 use project::Projects;
 use plug_manager;
-use file_browser::FileBrowserWidget;
+use side_panel::SidePanelWidget;
 use subscriptions::SubscriptionHandle;
 
 macro_rules! clone {
@@ -48,7 +48,7 @@ pub struct Ui {
     shell: Rc<RefCell<Shell>>,
     projects: Rc<RefCell<Projects>>,
     plug_manager: Arc<UiMutex<plug_manager::Manager>>,
-    file_browser: Arc<UiMutex<FileBrowserWidget>>,
+    side_panel: Arc<UiMutex<SidePanelWidget>>,
 }
 
 pub struct Components {
@@ -91,7 +91,7 @@ impl Ui {
         let plug_manager = plug_manager::Manager::new();
 
         let plug_manager = Arc::new(UiMutex::new(plug_manager));
-        let file_browser = Arc::new(UiMutex::new(FileBrowserWidget::new()));
+        let side_panel = Arc::new(UiMutex::new(SidePanelWidget::new()));
         let comps = Arc::new(UiMutex::new(Components::new()));
         let settings = Rc::new(RefCell::new(Settings::new()));
         let shell = Rc::new(RefCell::new(Shell::new(settings.clone(), options)));
@@ -106,7 +106,7 @@ impl Ui {
             settings,
             projects,
             plug_manager,
-            file_browser,
+            side_panel,
         }
     }
 
@@ -175,13 +175,13 @@ impl Ui {
 
         let show_sidebar_action =
             SimpleAction::new_stateful("show-sidebar", None, &false.to_variant());
-        let file_browser_ref = self.file_browser.clone();
+        let side_panel_ref = self.side_panel.clone();
         let comps_ref = self.comps.clone();
         show_sidebar_action.connect_change_state(move |action, value| {
             if let Some(ref value) = *value {
                 action.set_state(value);
                 let is_active = value.get::<bool>().unwrap();
-                file_browser_ref.borrow().set_visible(is_active);
+                side_panel_ref.borrow().set_visible(is_active);
                 comps_ref.borrow_mut().window_state.show_sidebar = is_active;
             }
         });
@@ -208,8 +208,8 @@ impl Ui {
         });
 
         let shell = self.shell.borrow();
-        let file_browser = self.file_browser.borrow();
-        main.pack1(&**file_browser, false, false);
+        let side_panel = self.side_panel.borrow();
+        main.pack1(&**side_panel, false, false);
         main.pack2(&**shell, true, false);
 
         window.add(&main);
@@ -263,14 +263,14 @@ impl Ui {
         }));
 
         let state_ref = self.shell.borrow().state.clone();
-        let file_browser_ref = self.file_browser.clone();
+        let side_panel_ref = self.side_panel.clone();
         let plug_manager_ref = self.plug_manager.clone();
         shell.set_nvim_started_cb(Some(move || {
             let state = state_ref.borrow();
             plug_manager_ref
                 .borrow_mut()
                 .init_nvim_client(state_ref.borrow().nvim_clone());
-            file_browser_ref.borrow_mut().init(&state);
+            side_panel_ref.borrow_mut().init(&state);
             state.set_autocmds();
             state.run_now(&update_title);
             if let Some(ref update_subtitle) = update_subtitle {
