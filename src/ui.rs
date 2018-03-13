@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gdk;
+use gdk::prelude::*;
 use gtk;
 use gtk::prelude::*;
 use gtk::{AboutDialog, ApplicationWindow, Button, HeaderBar, Orientation, Paned, SettingsExt};
@@ -120,6 +121,18 @@ impl Ui {
         settings.init();
 
         let window = ApplicationWindow::new(app);
+
+        let display = window.get_display().unwrap();
+        let screen = display.get_screen(0);
+        let css_provider = gtk::CssProvider::new();
+        css_provider.load_from_data(include_str!("../resources/style.css").as_bytes()).unwrap();
+        gtk::StyleContext::add_provider_for_screen(
+            &screen,
+            &css_provider,
+            gtk::STYLE_PROVIDER_PRIORITY_USER,
+        );
+
+
         let main = Paned::new(Orientation::Horizontal);
 
         {

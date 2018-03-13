@@ -2,14 +2,18 @@
 <!-- Generated with glade 3.20.4 -->
 <interface>
   <requires lib="gtk+" version="3.16"/>
-  <object class="GtkListBoxRow">
+  <object class="GtkImage" id="close_img">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="icon_name">window-close-symbolic</property>
+    <property name="icon_size">1</property>
+  </object>
+  <object class="GtkListBoxRow" id="row">
     <property name="can_focus">False</property>
     <child>
       <object class="GtkBox">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="margin_top">2</property>
-        <property name="margin_bottom">2</property>
         <child>
           <object class="GtkImage">
             <property name="visible">True</property>
@@ -20,7 +24,7 @@
           </object>
           <packing>
             <property name="expand">False</property>
-            <property name="fill">True</property>
+            <property name="fill">False</property>
             <property name="position">0</property>
           </packing>
         </child>
@@ -28,8 +32,9 @@
           <object class="GtkLabel" id="label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">buffer_name.ext</property>
-            <property name="xalign">0</property>
+            <property name="halign">start</property>
+            <property name="ellipsize">middle</property>
+            <property name="single_line_mode">True</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -43,23 +48,14 @@
             <property name="can_focus">True</property>
             <property name="focus_on_click">False</property>
             <property name="receives_default">True</property>
+            <property name="image">close_img</property>
             <property name="relief">none</property>
-            <child>
-              <object class="GtkImage">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="icon_name">window-close-symbolic</property>
-                <property name="icon_size">1</property>
-              </object>
-            </child>
             <style>
-              <!-- <class name="small-button"/> -->
-              <class name="flat"/>
             </style>
           </object>
           <packing>
             <property name="expand">False</property>
-            <property name="fill">True</property>
+            <property name="fill">False</property>
             <property name="position">2</property>
           </packing>
         </child>
