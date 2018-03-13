@@ -10,7 +10,7 @@ use nvim::{NeovimClient, NeovimRef};
 use shell;
 
 pub struct BufferList {
-    list: gtk::ListBox,
+    pub list: gtk::ListBox,
     nvim: Option<Rc<NeovimClient>>,
 }
 
@@ -33,7 +33,7 @@ impl BufferList {
     fn init_subscriptions(&mut self, shell_state: &shell::State) {
         let list = &self.list;
         let nvim_ref = self.nvim.as_ref().unwrap();
-        let _update_list = shell_state.subscribe(
+        let update_list = shell_state.subscribe(
             "DirChanged",
             &["getcwd()"],
             clone!(list, nvim_ref => move |args| {
@@ -41,7 +41,7 @@ impl BufferList {
                 populate_list(&list, &mut nvim_ref.nvim().unwrap(), &cwd);
             }),
         );
-        // shell_state.run_now(&update_list);
+        shell_state.run_now(&update_list);
     }
 }
 
@@ -55,7 +55,12 @@ fn populate_list(
     }
     if let Ok(buffers) = nvim.list_bufs() {
         for buffer in buffers {
-            if let Ok(name) = buffer.get_name(&mut nvim) {
+            let is_listed = buffer
+                .get_option(&mut nvim, "buflisted")
+                .unwrap()
+                .as_bool()
+                .unwrap();
+            if let (true, Ok(name)) = (is_listed, buffer.get_name(&mut nvim)) {
                 let display_name = if name.is_empty() {
                     "[No Name]"
                 } else if let Some(rel_path) = Path::new(&name)

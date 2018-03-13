@@ -1,3 +1,18 @@
-.close-button * {
-  background-color: red;
+.close-button {
+  border: none;
+  border-radius: 0px;
+  padding: 0px 6px;
+}
+
+.close-button:not(:hover) {
+  opacity: .5;
+}
+
+.close-button:hover {
+  background: none;
+  box-shadow: none;
+}
+
+row:selected .close-button:hover {
+  color: unset;
 }

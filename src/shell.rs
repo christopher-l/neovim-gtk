@@ -360,7 +360,7 @@ impl State {
     pub fn run_now(&self, handle: &SubscriptionHandle) {
         self.subscriptions
             .borrow()
-            .run_now(handle, &mut self.nvim().unwrap());
+            .run_now(handle, &self.nvim);
     }
 }
 

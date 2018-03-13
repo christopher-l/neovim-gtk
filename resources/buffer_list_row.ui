@@ -51,6 +51,7 @@
             <property name="image">close_img</property>
             <property name="relief">none</property>
             <style>
+              <class name="close-button"/>
             </style>
           </object>
           <packing>

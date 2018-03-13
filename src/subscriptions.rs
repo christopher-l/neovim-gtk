@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use neovim_lib::{NeovimApi, NeovimApiAsync, Value};
 
-use nvim::{ErrorReport, NeovimRef};
+use nvim::{ErrorReport, NeovimClient, NeovimRef};
 
 /// A subscription to a Neovim autocmd event.
 struct Subscription {
@@ -136,12 +136,12 @@ impl Subscriptions {
     /// The `nvim` instance is needed to evaluate the `args` expressions.
     ///
     /// This function is wrapped by `shell::State`.
-    pub fn run_now(&self, handle: &SubscriptionHandle, nvim: &mut NeovimRef) {
+    pub fn run_now(&self, handle: &SubscriptionHandle, nvim: &NeovimClient) {
         let subscription = &self.0.get(&handle.event_name).unwrap()[handle.index];
         let args = subscription
             .args
             .iter()
-            .map(|arg| nvim.eval(arg))
+            .map(|arg| nvim.nvim().unwrap().eval(arg))
             .map(|res| {
                 res.ok()
                     .and_then(|val| val.as_str().map(|s: &str| s.to_owned()))
