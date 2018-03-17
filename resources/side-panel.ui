@@ -129,14 +129,10 @@
                     <child>
                       <object class="GtkListBox" id="buffer_list">
                         <property name="can_focus">False</property>
-                        <property name="valign">start</property>
                       </object>
                     </child>
                   </object>
                 </child>
-                <style>
-                  <class name="view"/>
-                </style>
               </object>
               <packing>
                 <property name="expand">True</property>
