@@ -50,6 +50,7 @@ mod tabline;
 mod error;
 mod side_panel;
 mod subscriptions;
+mod aux;
 
 use std::env;
 use std::time::Duration;

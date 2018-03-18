@@ -13,6 +13,7 @@ use gio::prelude::*;
 use gio::{Menu, MenuExt, MenuItem, SimpleAction};
 use toml;
 
+use aux::get_buffer_title;
 use settings::{Settings, SettingsLoader};
 use shell::{self, Shell, ShellOptions};
 use shell_dlg;
@@ -243,20 +244,10 @@ impl Ui {
             move |args| {
                 let comps = comps_ref.borrow();
                 let window = comps.window.as_ref().unwrap();
-                let file_path = &args[0];
-                let dir = Path::new(&args[1]);
-                let filename = if file_path.is_empty() {
-                    "[No Name]"
-                } else if let Some(rel_path) = Path::new(&file_path)
-                    .strip_prefix(&dir)
-                    .ok()
-                    .and_then(|p| p.to_str())
-                {
-                    rel_path
-                } else {
-                    &file_path
-                };
-                window.set_title(filename);
+                let filename = &args[0];
+                let cwd = Path::new(&args[1]);
+                let buffer_title = get_buffer_title(filename, dir);
+                window.set_title(&buffer_title);
             },
         );
 

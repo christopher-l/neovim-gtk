@@ -7,6 +7,7 @@ use gtk::prelude::*;
 
 use neovim_lib::NeovimApi;
 
+use aux::get_buffer_title;
 use nvim::{NeovimClient, NeovimRef};
 use shell;
 
@@ -125,25 +126,15 @@ fn populate_list(
                 .unwrap()
                 .as_bool()
                 .unwrap();
-            if let (true, Ok(name)) = (is_listed, buffer.get_name(&mut nvim)) {
+            if let (true, Ok(filename)) = (is_listed, buffer.get_name(&mut nvim)) {
                 n_buffers += 1;
-                let display_name = if name.is_empty() {
-                    "[No Name]"
-                } else if let Some(rel_path) = Path::new(&name)
-                    .strip_prefix(&cwd)
-                    .ok()
-                    .and_then(|p| p.to_str())
-                {
-                    rel_path
-                } else {
-                    &name
-                };
+                let buffer_title = get_buffer_title(&filename, cwd);
                 let builder = gtk::Builder::new_from_string(
                     include_str!("../../resources/buffer_list_row.ui"),
                 );
                 let row: gtk::ListBoxRow = builder.get_object("row").unwrap();
                 let label: gtk::Label = builder.get_object("label").unwrap();
-                label.set_label(&display_name);
+                label.set_label(&buffer_title);
                 list.add(&row);
                 row.show();
             }
