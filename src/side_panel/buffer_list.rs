@@ -5,10 +5,10 @@ use std::rc::Rc;
 use gtk;
 use gtk::prelude::*;
 
-use neovim_lib::{NeovimApi, Value};
+use neovim_lib::{NeovimApi, NeovimApiAsync, Value};
 
 use aux::{get_buffer_name};
-use nvim::{NeovimClient};
+use nvim::{ErrorReport, NeovimClient};
 use shell;
 
 #[derive(Debug, Default, PartialEq)]
@@ -83,15 +83,16 @@ impl BufferList {
         shell_state.subscribe(
             "BufAdd",
             &["getcwd()", "getbufinfo()"],
-            clone!(list, paned, pane_state_ref, stored_buffers_ref => move |args| {
+            clone!(list, paned, nvim_ref, pane_state_ref, stored_buffers_ref => move |args| {
                 println!("BufAdd");
                 let cwd = &args[0];
                 let cwd = Path::new(cwd.as_str().unwrap());
                 let buf_info = &args[1];
                 let buffers = read_buffer_list(buf_info);
-                on_add(
+                on_buf_add(
                     &list,
                     &paned,
+                    &nvim_ref,
                     &mut pane_state_ref.borrow_mut(),
                     &cwd,
                     buffers,
@@ -103,7 +104,7 @@ impl BufferList {
         shell_state.subscribe(
             "BufDelete",
             &[],
-            clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move |args| {
+            clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move |_| {
                 println!("BufDelete");
                 // BufDelete is triggered before the buffer is deleted, so wait for a cycle.
                 gtk::idle_add(
@@ -117,7 +118,7 @@ impl BufferList {
                                     // The buffer is still there, wait another cycle.
                                     gtk::Continue(true)
                                 } else {
-                                    on_delete(
+                                    on_buf_delete(
                                         &list,
                                         &paned,
                                         &mut pane_state_ref.borrow_mut(),
@@ -134,6 +135,20 @@ impl BufferList {
                             }
                         }
                     })
+                );
+            }),
+        );
+
+        shell_state.subscribe(
+            "BufEnter",
+            &["bufnr('%')"],
+            clone!(list, stored_buffers_ref => move |args| {
+                println!("BufEnter");
+                let current_buffer_number = args[0].as_u64().unwrap();
+                on_buf_enter(
+                    &list,
+                    &stored_buffers_ref.borrow(),
+                    current_buffer_number,
                 );
             }),
         );
@@ -169,6 +184,7 @@ impl BufferList {
             init_list(
                 &list,
                 &paned,
+                nvim_ref,
                 &mut pane_state_ref.borrow_mut(),
                 &cwd,
                 &buffers,
@@ -178,26 +194,42 @@ impl BufferList {
     }
 
     fn connect_events(&mut self) {
+        let list = &self.list;
+        let nvim_ref = self.nvim.as_ref().unwrap();
+        let stored_buffers_ref = &self.buffers;
+
+        list.connect_row_activated(clone!(nvim_ref, stored_buffers_ref => move |list, row| {
+            if let Some(index) = list.get_children().iter().position(|r| r == row) {
+                if let Some(buffer) = stored_buffers_ref.borrow().get(index) {
+                    let mut nvim = nvim_ref.nvim().unwrap();
+                    nvim.command_async(&format!(":b {}", buffer.number))
+                        .cb(|r| r.report_err())
+                        .call();
+                }
+            }
+        }));
     }
 }
 
 fn init_list(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
+    nvim_ref: &Rc<NeovimClient>,
     pane_state: &mut PaneState,
     cwd: &Path,
     buffers: &[Buffer],
 ) {
     let n_buffers = buffers.len();
     for buffer in buffers {
-        add_row(list, buffer, cwd);
+        add_row(list, Rc::clone(nvim_ref), buffer, cwd);
     }
     update_pane_position(paned, pane_state, n_buffers);
 }
 
-fn on_add(
+fn on_buf_add(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
+    nvim_ref: &Rc<NeovimClient>,
     pane_state: &mut PaneState,
     cwd: &Path,
     mut buffers: Vec<Buffer>,
@@ -208,7 +240,7 @@ fn on_add(
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
     if let Some(buffer) = buffers.pop() {
-        add_row(list, &buffer, cwd);
+        add_row(list, Rc::clone(nvim_ref), &buffer, cwd);
         stored_buffers.push(buffer);
     } else {
         error!("Empty buffer list after BufAdd was received.");
@@ -218,7 +250,7 @@ fn on_add(
     }
 }
 
-fn on_delete(
+fn on_buf_delete(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
     pane_state: &mut PaneState,
@@ -243,6 +275,19 @@ fn on_delete(
         }
     } else {
         error!("Failed to remove deleted buffer from buffer list.")
+    }
+}
+
+fn on_buf_enter(
+    list: &gtk::ListBox,
+    buffers: &[Buffer],
+    current_buffer_number: u64,
+) {
+    if let Some(index) = buffers.iter().position(|buffer| buffer.number == current_buffer_number) {
+        if let Some(row) = list.get_children().get(index) {
+            let row = row.clone().downcast::<gtk::ListBoxRow>().unwrap();
+            list.select_row(&row);
+        }
     }
 }
 
@@ -293,15 +338,23 @@ fn update_pane_position(
     }
 }
 
-fn add_row(list: &gtk::ListBox, buffer: &Buffer, cwd: &Path) {
+fn add_row(list: &gtk::ListBox, nvim_ref: Rc<NeovimClient>, buffer: &Buffer, cwd: &Path) {
     let builder = gtk::Builder::new_from_string(
         include_str!("../../resources/buffer_list_row.ui"),
     );
     let row: gtk::ListBoxRow = builder.get_object("row").unwrap();
     let label: gtk::Label = builder.get_object("label").unwrap();
+    let close_btn: gtk::Button = builder.get_object("close_btn").unwrap();
     label.set_label(&get_buffer_name(&buffer.filename, cwd));
     list.add(&row);
     row.show();
+    let buffer_number = buffer.number;
+    close_btn.connect_clicked(move |_| {
+        let mut nvim = nvim_ref.nvim().unwrap();
+        nvim.command_async(&format!(":bd {}", buffer_number))
+            .cb(|r| r.report_err())
+            .call();
+    });
 }
 
 fn get_label(row: gtk::Widget) -> gtk::Label {
