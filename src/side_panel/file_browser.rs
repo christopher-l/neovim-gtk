@@ -14,6 +14,7 @@ use gtk::prelude::*;
 
 use neovim_lib::{NeovimApi, NeovimApiAsync};
 
+use aux::get_current_dir;
 use nvim::{ErrorReport, NeovimClient, NeovimRef};
 use shell;
 
@@ -492,16 +493,6 @@ fn populate_tree_nodes(
                 let iter = store.append(&iter);
                 store.set(&iter, &[], &[]);
             }
-        }
-    }
-}
-
-fn get_current_dir(nvim: &mut NeovimRef) -> Option<String> {
-    match nvim.eval("getcwd()") {
-        Ok(cwd) => cwd.as_str().map(|s| s.to_owned()),
-        Err(err) => {
-            error!("Couldn't get cwd: {}", err);
-            None
         }
     }
 }

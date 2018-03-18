@@ -13,7 +13,7 @@ use gio::prelude::*;
 use gio::{Menu, MenuExt, MenuItem, SimpleAction};
 use toml;
 
-use aux::get_buffer_title;
+use aux::get_buffer_name;
 use settings::{Settings, SettingsLoader};
 use shell::{self, Shell, ShellOptions};
 use shell_dlg;
@@ -244,10 +244,10 @@ impl Ui {
             move |args| {
                 let comps = comps_ref.borrow();
                 let window = comps.window.as_ref().unwrap();
-                let filename = &args[0];
+                let current_filename = &args[0];
                 let cwd = Path::new(&args[1]);
-                let buffer_title = get_buffer_title(filename, dir);
-                window.set_title(&buffer_title);
+                let current_buffer_name = get_buffer_name(current_filename, cwd);
+                window.set_title(&current_buffer_name);
             },
         );
 
