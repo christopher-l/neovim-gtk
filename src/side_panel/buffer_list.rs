@@ -7,13 +7,13 @@ use gtk::prelude::*;
 
 use neovim_lib::{NeovimApi, Value};
 
-use aux::{get_buffer_name, get_current_dir};
-use nvim::{NeovimClient, NeovimRef};
+use aux::{get_buffer_name};
+use nvim::{NeovimClient};
 use shell;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 struct Buffer {
-    name: String,
+    filename: String,
     number: u64,
     changed: bool,
 }
@@ -31,6 +31,7 @@ pub struct BufferList {
     paned: gtk::Paned,
     nvim: Option<Rc<NeovimClient>>,
     pane_state: Rc<RefCell<PaneState>>,
+    buffers: Rc<RefCell<Vec<Buffer>>>,
 }
 
 impl BufferList {
@@ -48,6 +49,7 @@ impl BufferList {
                 row_height: 0,
                 was_dragged: false,
             })),
+            buffers: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -76,11 +78,12 @@ impl BufferList {
         let paned = &self.paned;
         let nvim_ref = self.nvim.as_ref().unwrap();
         let pane_state_ref = &self.pane_state;
+        let stored_buffers_ref = &self.buffers;
 
         shell_state.subscribe(
             "BufAdd",
             &["getcwd()", "getbufinfo()"],
-            clone!(list, paned, pane_state_ref => move |args| {
+            clone!(list, paned, pane_state_ref, stored_buffers_ref => move |args| {
                 println!("BufAdd");
                 let cwd = &args[0];
                 let cwd = Path::new(cwd.as_str().unwrap());
@@ -91,41 +94,64 @@ impl BufferList {
                     &paned,
                     &mut pane_state_ref.borrow_mut(),
                     &cwd,
-                    &buffers,
+                    buffers,
+                    &mut stored_buffers_ref.borrow_mut(),
                 );
             }),
         );
 
         shell_state.subscribe(
             "BufDelete",
-            &["getcwd()", "getbufinfo()"],
-            clone!(list, paned, pane_state_ref => move |args| {
+            &[],
+            clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move |args| {
                 println!("BufDelete");
-                let cwd = &args[0];
-                let cwd = Path::new(cwd.as_str().unwrap());
-                let buf_info = &args[1];
-                let buffers = read_buffer_list(buf_info);
-                on_delete(
-                    &list,
-                    &paned,
-                    &mut pane_state_ref.borrow_mut(),
-                    &cwd,
-                    &buffers,
+                // BufDelete is triggered before the buffer is deleted, so wait for a cycle.
+                gtk::idle_add(
+                    clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move || {
+                        let mut nvim = nvim_ref.nvim().unwrap();
+                        match nvim.eval("getbufinfo()") {
+                            Ok(buf_info) => {
+                                let buffers = read_buffer_list(&buf_info);
+                                let mut stored_buffers = stored_buffers_ref.borrow_mut();
+                                if buffers.len() == stored_buffers.len() {
+                                    // The buffer is still there, wait another cycle.
+                                    gtk::Continue(true)
+                                } else {
+                                    on_delete(
+                                        &list,
+                                        &paned,
+                                        &mut pane_state_ref.borrow_mut(),
+                                        &buffers,
+                                        &mut stored_buffers,
+                                    );
+                                    *stored_buffers = buffers;
+                                    gtk::Continue(false)
+                                }
+                            }
+                            Err(err) => {
+                                error!("Couldn't get bufinfo: {}", err);
+                                gtk::Continue(false)
+                            }
+                        }
+                    })
                 );
             }),
         );
 
         shell_state.subscribe(
             "DirChanged",
-            &["getcwd()"],
-            clone!(list, nvim_ref => move |args| {
+            &["getcwd()", "getbufinfo()"],
+            clone!(list, stored_buffers_ref => move |args| {
                 let cwd = &args[0];
                 let cwd = Path::new(cwd.as_str().unwrap());
+                let buf_info = &args[1];
+                let buffers = read_buffer_list(buf_info);
                 on_dir_changed(
                     &list,
-                    &mut nvim_ref.nvim().unwrap(),
                     &cwd,
+                    &buffers,
                 );
+                *stored_buffers_ref.borrow_mut() = buffers;
             }),
         );
 
@@ -146,7 +172,8 @@ impl BufferList {
                 &mut pane_state_ref.borrow_mut(),
                 &cwd,
                 &buffers,
-             )
+            );
+            *stored_buffers_ref.borrow_mut() = buffers;
         }
     }
 
@@ -173,14 +200,16 @@ fn on_add(
     paned: &gtk::Paned,
     pane_state: &mut PaneState,
     cwd: &Path,
-    buffers: &[Buffer],
+    mut buffers: Vec<Buffer>,
+    stored_buffers: &mut Vec<Buffer>,
 ) {
     let rows = list.get_children();
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    if let Some(buffer) = buffers.last() {
-        add_row(list, buffer, cwd);
+    if let Some(buffer) = buffers.pop() {
+        add_row(list, &buffer, cwd);
+        stored_buffers.push(buffer);
     } else {
         error!("Empty buffer list after BufAdd was received.");
     }
@@ -193,43 +222,40 @@ fn on_delete(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
     pane_state: &mut PaneState,
-    cwd: &Path,
     buffers: &[Buffer],
+    stored_buffers: &mut Vec<Buffer>,
 ) {
     let rows = list.get_children();
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    let mut removed_row = false;
-    for (row, buffer) in rows.iter().zip(buffers) {
-        let label = get_label(row.clone());
-        if label.get_text() != Some(get_buffer_name(&buffer.name, cwd)) {
-            list.remove(row);
-            removed_row = true;
+    let mut was_successful = false;
+    for (index, stored_buffer) in stored_buffers.iter().enumerate() {
+        if !buffers.iter().any(|buffer| stored_buffer == buffer) {
+            was_successful = true;
+            list.remove(&rows[index]);
             break;
         }
     }
-    if !removed_row {
-        if let Some(last) = rows.last() {
-            list.remove(last);
+    if was_successful {
+        if !pane_state.was_dragged {
+            update_pane_position(paned, pane_state, rows.len() - 1);
         }
-    }
-    if !pane_state.was_dragged {
-        update_pane_position(paned, pane_state, rows.len() - 1);
+    } else {
+        error!("Failed to remove deleted buffer from buffer list.")
     }
 }
 
 fn on_dir_changed(
     list: &gtk::ListBox,
-    nvim: &mut NeovimRef,
     cwd: &Path,
+    buffers: &[Buffer],
 ) {
     let rows = list.get_children();
-    // let buffer_names = get_buffers(nvim, cwd);
-    // for (row, buffer_name) in rows.iter().zip(buffer_names) {
-    //     let label = get_label(row.clone());
-    //     label.set_text(&buffer_name);
-    // }
+    for (row, buffer) in rows.iter().zip(buffers) {
+        let label = get_label(row.clone());
+        label.set_text(&get_buffer_name(&buffer.filename, cwd));
+    }
 }
 
 fn update_pane_was_dragged(
@@ -273,7 +299,7 @@ fn add_row(list: &gtk::ListBox, buffer: &Buffer, cwd: &Path) {
     );
     let row: gtk::ListBoxRow = builder.get_object("row").unwrap();
     let label: gtk::Label = builder.get_object("label").unwrap();
-    label.set_label(&get_buffer_name(&buffer.name, cwd));
+    label.set_label(&get_buffer_name(&buffer.filename, cwd));
     list.add(&row);
     row.show();
 }
@@ -303,7 +329,7 @@ fn read_buffer_list(buf_info: &Value) -> Vec<Buffer> {
         let mut buffer = Buffer::default();
         for &(ref key, ref value) in map {
             match key.as_str().unwrap() {
-                "name" => buffer.name = value.as_str().unwrap().to_owned(),
+                "name" => buffer.filename = value.as_str().unwrap().to_owned(),
                 "bufnr" => buffer.number = value.as_u64().unwrap(),
                 "changed" => buffer.changed = value.as_u64().unwrap() != 0,
                 "listed" => {
