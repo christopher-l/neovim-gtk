@@ -124,7 +124,7 @@ impl Ui {
         let window = ApplicationWindow::new(app);
 
         let display = window.get_display().unwrap();
-        let screen = display.get_screen(0);
+        let screen = display.get_default_screen();
         let css_provider = gtk::CssProvider::new();
         css_provider.load_from_data(include_str!("../resources/style.css").as_bytes()).unwrap();
         gtk::StyleContext::add_provider_for_screen(

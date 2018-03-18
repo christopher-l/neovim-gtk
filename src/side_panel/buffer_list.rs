@@ -336,6 +336,7 @@ fn update_pane_was_dragged(
         && paned.get_position() as usize > pane_state.min_height
     ) {
         pane_state.was_dragged = true;
+        println!("setting pane_state.was_dragged = true");
     }
 }
 
