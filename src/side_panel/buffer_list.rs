@@ -15,7 +15,7 @@ use shell;
 struct Buffer {
     filename: String,
     number: u64,
-    changed: bool,
+    // changed: bool,
 }
 
 struct PaneState {
@@ -125,7 +125,6 @@ impl BufferList {
                                         &buffers,
                                         &mut stored_buffers,
                                     );
-                                    *stored_buffers = buffers;
                                     gtk::Continue(false)
                                 }
                             }
@@ -156,7 +155,7 @@ impl BufferList {
         shell_state.subscribe(
             "DirChanged",
             &["getcwd()", "getbufinfo()"],
-            clone!(list, stored_buffers_ref => move |args| {
+            clone!(list => move |args| {
                 let cwd = &args[0];
                 let cwd = Path::new(cwd.as_str().unwrap());
                 let buf_info = &args[1];
@@ -166,7 +165,6 @@ impl BufferList {
                     &cwd,
                     &buffers,
                 );
-                *stored_buffers_ref.borrow_mut() = buffers;
             }),
         );
 
@@ -232,14 +230,16 @@ fn on_buf_add(
     nvim_ref: &Rc<NeovimClient>,
     pane_state: &mut PaneState,
     cwd: &Path,
-    mut buffers: Vec<Buffer>,
+    buffers: Vec<Buffer>,
     stored_buffers: &mut Vec<Buffer>,
 ) {
     let rows = list.get_children();
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    if let Some(buffer) = buffers.pop() {
+    if let Some(buffer) = buffers.into_iter().find(|buffer| {
+        !stored_buffers.iter().any(|stored_buffer| stored_buffer == buffer)
+    }) {
         add_row(list, Rc::clone(nvim_ref), &buffer, cwd);
         stored_buffers.push(buffer);
     } else {
@@ -261,15 +261,16 @@ fn on_buf_delete(
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    let mut was_successful = false;
-    for (index, stored_buffer) in stored_buffers.iter().enumerate() {
+    let mut index = None;
+    for (current_index, stored_buffer) in stored_buffers.iter().enumerate() {
         if !buffers.iter().any(|buffer| stored_buffer == buffer) {
-            was_successful = true;
-            list.remove(&rows[index]);
+            index = Some(current_index);
             break;
         }
     }
-    if was_successful {
+    if let Some(index) = index {
+        list.remove(&rows[index]);
+        stored_buffers.remove(index);
         if !pane_state.was_dragged {
             update_pane_position(paned, pane_state, rows.len() - 1);
         }
@@ -384,7 +385,7 @@ fn read_buffer_list(buf_info: &Value) -> Vec<Buffer> {
             match key.as_str().unwrap() {
                 "name" => buffer.filename = value.as_str().unwrap().to_owned(),
                 "bufnr" => buffer.number = value.as_u64().unwrap(),
-                "changed" => buffer.changed = value.as_u64().unwrap() != 0,
+                // "changed" => buffer.changed = value.as_u64().unwrap() != 0,
                 "listed" => {
                     if value.as_u64().unwrap() != 1 {
                         continue 'buffer;
