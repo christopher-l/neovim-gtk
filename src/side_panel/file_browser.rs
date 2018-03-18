@@ -187,11 +187,12 @@ impl FileBrowser {
             "DirChanged",
             &["getcwd()"],
             clone!(store, state_ref, dir_list_model, dir_list => move |args| {
-                let dir = args.into_iter().next().unwrap();
+                let dir = args.iter().next().unwrap();
+                let dir = dir.as_str().unwrap();
                 let mut state = state_ref.borrow_mut();
-                if dir != *state.current_dir {
+                if dir != state.current_dir {
                     update_dir_list(&dir, &dir_list_model, &dir_list);
-                    state.current_dir = dir;
+                    state.current_dir = dir.to_owned();
                     tree_reload(&store, &state);
                 }
             }),
@@ -205,9 +206,11 @@ impl FileBrowser {
             clone!(tree, store => move |args| {
                 let mut args_iter = args.into_iter();
                 let dir = args_iter.next().unwrap();
+                let dir = dir.as_str().unwrap();
                 let file_path = args_iter.next().unwrap();
+                let file_path = file_path.as_str().unwrap();
                 let could_reveal =
-                    if let Ok(rel_path) = Path::new(&file_path).strip_prefix(&Path::new(&dir)) {
+                    if let Ok(rel_path) = Path::new(file_path).strip_prefix(&Path::new(dir)) {
                         reveal_path_in_tree(&store, &tree, &rel_path)
                     } else {
                         false

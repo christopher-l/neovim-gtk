@@ -5,11 +5,18 @@ use std::rc::Rc;
 use gtk;
 use gtk::prelude::*;
 
-use neovim_lib::NeovimApi;
+use neovim_lib::{NeovimApi, Value};
 
 use aux::{get_buffer_name, get_current_dir};
 use nvim::{NeovimClient, NeovimRef};
 use shell;
+
+#[derive(Debug, Default)]
+struct Buffer {
+    name: String,
+    number: u64,
+    changed: bool,
+}
 
 struct PaneState {
     min_height: usize,
@@ -72,32 +79,38 @@ impl BufferList {
 
         shell_state.subscribe(
             "BufAdd",
-            &["getcwd()"],
-            clone!(list, paned, nvim_ref, pane_state_ref => move |args| {
+            &["getcwd()", "getbufinfo()"],
+            clone!(list, paned, pane_state_ref => move |args| {
                 println!("BufAdd");
-                let cwd = Path::new(&args[0]);
+                let cwd = &args[0];
+                let cwd = Path::new(cwd.as_str().unwrap());
+                let buf_info = &args[1];
+                let buffers = read_buffer_list(buf_info);
                 on_add(
                     &list,
                     &paned,
-                    &mut nvim_ref.nvim().unwrap(),
                     &mut pane_state_ref.borrow_mut(),
                     &cwd,
+                    &buffers,
                 );
             }),
         );
 
         shell_state.subscribe(
             "BufDelete",
-            &["getcwd()"],
-            clone!(list, paned, nvim_ref, pane_state_ref => move |args| {
+            &["getcwd()", "getbufinfo()"],
+            clone!(list, paned, pane_state_ref => move |args| {
                 println!("BufDelete");
-                let cwd = Path::new(&args[0]);
+                let cwd = &args[0];
+                let cwd = Path::new(cwd.as_str().unwrap());
+                let buf_info = &args[1];
+                let buffers = read_buffer_list(buf_info);
                 on_delete(
                     &list,
                     &paned,
-                    &mut nvim_ref.nvim().unwrap(),
                     &mut pane_state_ref.borrow_mut(),
                     &cwd,
+                    &buffers,
                 );
             }),
         );
@@ -106,7 +119,8 @@ impl BufferList {
             "DirChanged",
             &["getcwd()"],
             clone!(list, nvim_ref => move |args| {
-                let cwd = Path::new(&args[0]);
+                let cwd = &args[0];
+                let cwd = Path::new(cwd.as_str().unwrap());
                 on_dir_changed(
                     &list,
                     &mut nvim_ref.nvim().unwrap(),
@@ -116,13 +130,22 @@ impl BufferList {
         );
 
         let mut nvim = nvim_ref.nvim().unwrap();
-        if let Some(cwd) = get_current_dir(&mut nvim) {
+        if let Some(args) = ["getcwd()", "getbufinfo()"]
+            .iter()
+            .map(|arg| nvim.eval(arg))
+            .map(|res| res.ok())
+            .collect::<Option<Vec<Value>>>()
+        {
+            let cwd = &args[0];
+            let cwd = Path::new(cwd.as_str().unwrap());
+            let buf_info = &args[1];
+            let buffers = read_buffer_list(buf_info);
             init_list(
                 &list,
                 &paned,
-                &mut nvim,
                 &mut pane_state_ref.borrow_mut(),
-                &Path::new(&cwd),
+                &cwd,
+                &buffers,
              )
         }
     }
@@ -134,14 +157,13 @@ impl BufferList {
 fn init_list(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
-    nvim: &mut NeovimRef,
     pane_state: &mut PaneState,
     cwd: &Path,
+    buffers: &[Buffer],
 ) {
-    let buffers = get_buffers(nvim, cwd);
     let n_buffers = buffers.len();
-    for buffer_name in buffers {
-        add_row(list, &buffer_name);
+    for buffer in buffers {
+        add_row(list, buffer, cwd);
     }
     update_pane_position(paned, pane_state, n_buffers);
 }
@@ -149,16 +171,16 @@ fn init_list(
 fn on_add(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
-    nvim: &mut NeovimRef,
     pane_state: &mut PaneState,
     cwd: &Path,
+    buffers: &[Buffer],
 ) {
     let rows = list.get_children();
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    if let Some(new_buffer_name) = get_buffers(nvim, cwd).last() {
-        add_row(list, new_buffer_name);
+    if let Some(buffer) = buffers.last() {
+        add_row(list, buffer, cwd);
     } else {
         error!("Empty buffer list after BufAdd was received.");
     }
@@ -170,19 +192,18 @@ fn on_add(
 fn on_delete(
     list: &gtk::ListBox,
     paned: &gtk::Paned,
-    nvim: &mut NeovimRef,
     pane_state: &mut PaneState,
     cwd: &Path,
+    buffers: &[Buffer],
 ) {
     let rows = list.get_children();
     if !pane_state.was_dragged {
         update_pane_was_dragged(paned, pane_state, &*rows);
     }
-    let buffer_names = get_buffers(nvim, cwd);
     let mut removed_row = false;
-    for (row, buffer_name) in rows.iter().zip(buffer_names) {
+    for (row, buffer) in rows.iter().zip(buffers) {
         let label = get_label(row.clone());
-        if label.get_text() != Some(buffer_name) {
+        if label.get_text() != Some(get_buffer_name(&buffer.name, cwd)) {
             list.remove(row);
             removed_row = true;
             break;
@@ -204,11 +225,11 @@ fn on_dir_changed(
     cwd: &Path,
 ) {
     let rows = list.get_children();
-    let buffer_names = get_buffers(nvim, cwd);
-    for (row, buffer_name) in rows.iter().zip(buffer_names) {
-        let label = get_label(row.clone());
-        label.set_text(&buffer_name);
-    }
+    // let buffer_names = get_buffers(nvim, cwd);
+    // for (row, buffer_name) in rows.iter().zip(buffer_names) {
+    //     let label = get_label(row.clone());
+    //     label.set_text(&buffer_name);
+    // }
 }
 
 fn update_pane_was_dragged(
@@ -246,45 +267,13 @@ fn update_pane_position(
     }
 }
 
-fn get_buffers(
-    mut nvim: &mut NeovimRef,
-    cwd: &Path,
-) -> Vec<String> {
-    let buffers = match nvim.list_bufs() {
-        Ok(buffers) => buffers,
-        Err(err) => {
-            error!("Couldn't read buffer list: {}", err);
-            return Vec::new();
-        }
-    };
-    // buffers
-    //     .iter()
-    //     .filter_map(|buffer| {
-    //         let is_listed = buffer
-    //             .get_option(&mut nvim, "buflisted")
-    //             .unwrap()
-    //             .as_bool()
-    //             .unwrap();
-    //         if is_listed {
-    //             buffer.get_name(&mut nvim).ok()
-    //         } else {
-    //             None
-    //         }
-    //     })
-    //     .map(|filename| {
-    //         get_buffer_name(&filename, cwd)
-    //     })
-    //     .collect()
-    vec!["foo".to_owned()]
-}
-
-fn add_row(list: &gtk::ListBox, buffer_name: &str) {
+fn add_row(list: &gtk::ListBox, buffer: &Buffer, cwd: &Path) {
     let builder = gtk::Builder::new_from_string(
         include_str!("../../resources/buffer_list_row.ui"),
     );
     let row: gtk::ListBoxRow = builder.get_object("row").unwrap();
     let label: gtk::Label = builder.get_object("label").unwrap();
-    label.set_label(&buffer_name);
+    label.set_label(&get_buffer_name(&buffer.name, cwd));
     list.add(&row);
     row.show();
 }
@@ -305,4 +294,27 @@ fn get_label(row: gtk::Widget) -> gtk::Label {
         .unwrap()
         .downcast::<gtk::Label>()
         .unwrap()
+}
+
+fn read_buffer_list(buf_info: &Value) -> Vec<Buffer> {
+    let mut buffers = Vec::new();
+    'buffer: for entry in buf_info.as_array().unwrap() {
+        let map = entry.as_map().unwrap();
+        let mut buffer = Buffer::default();
+        for &(ref key, ref value) in map {
+            match key.as_str().unwrap() {
+                "name" => buffer.name = value.as_str().unwrap().to_owned(),
+                "bufnr" => buffer.number = value.as_u64().unwrap(),
+                "changed" => buffer.changed = value.as_u64().unwrap() != 0,
+                "listed" => {
+                    if value.as_u64().unwrap() != 1 {
+                        continue 'buffer;
+                    }
+                }
+                _ => {}
+            }
+        }
+        buffers.push(buffer);
+    }
+    buffers
 }

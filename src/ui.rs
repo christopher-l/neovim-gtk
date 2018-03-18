@@ -244,8 +244,9 @@ impl Ui {
             move |args| {
                 let comps = comps_ref.borrow();
                 let window = comps.window.as_ref().unwrap();
-                let current_filename = &args[0];
-                let cwd = Path::new(&args[1]);
+                let current_filename = &args[0].as_str().unwrap();
+                let cwd = &args[1];
+                let cwd = Path::new(cwd.as_str().unwrap());
                 let current_buffer_name = get_buffer_name(current_filename, cwd);
                 window.set_title(&current_buffer_name);
             },
@@ -325,7 +326,7 @@ impl Ui {
             "DirChanged",
             &["getcwd()"],
             move |args| {
-                header_bar.set_subtitle(&*args[0]);
+                header_bar.set_subtitle(&*args[0].as_str().unwrap());
             },
         );
 

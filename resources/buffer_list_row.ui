@@ -34,7 +34,7 @@
             <property name="can_focus">False</property>
             <property name="halign">start</property>
             <property name="hexpand">True</property>
-            <property name="ellipsize">middle</property>
+            <property name="ellipsize">start</property>
             <property name="single_line_mode">True</property>
           </object>
           <packing>

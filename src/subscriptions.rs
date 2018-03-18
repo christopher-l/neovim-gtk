@@ -7,7 +7,7 @@ use nvim::{ErrorReport, NeovimClient, NeovimRef};
 /// A subscription to a Neovim autocmd event.
 struct Subscription {
     /// A callback to be executed each time the event triggers.
-    cb: Box<Fn(Vec<String>) + 'static>,
+    cb: Box<Fn(Vec<Value>) + 'static>,
     /// A list of expressions which will be evaluated when the event triggers. The result is passed
     /// to the callback.
     args: Vec<String>,
@@ -47,7 +47,7 @@ impl Subscriptions {
     ///
     /// - `args`: A list of expressions to be evaluated when the event triggers.
     ///   Expressions are evaluated using Vimscript. The results are passed to the callback as a
-    ///   list of Strings.
+    ///   list of Values.
     ///   This is especially useful as `Neovim::eval` is synchronous and might block if called from
     ///   the callback function; so always use the `args` mechanism instead.
     ///
@@ -69,7 +69,7 @@ impl Subscriptions {
     /// ```
     pub fn subscribe<F>(&mut self, event_name: &str, args: &[&str], cb: F) -> SubscriptionHandle
     where
-        F: Fn(Vec<String>) + 'static,
+        F: Fn(Vec<Value>) + 'static,
     {
         let entry = self.0.entry(event_name.to_owned()).or_insert(Vec::new());
         let index = entry.len();
@@ -103,7 +103,7 @@ impl Subscriptions {
     }
 
     /// Trigger given event.
-    fn on_notify(&self, event_name: &str, index: usize, args: Vec<String>) {
+    fn on_notify(&self, event_name: &str, index: usize, args: Vec<Value>) {
         if let Some(subscription) = self.0.get(event_name).and_then(|v| v.get(index)) {
             (*subscription.cb)(args);
         }
@@ -124,9 +124,7 @@ impl Subscriptions {
             .and_then(|i| i.as_u64())
             .ok_or("Error reading index")? as usize;
         let args = params_iter
-            .map(|arg| arg.as_str().map(|s| s.to_owned()))
-            .collect::<Option<Vec<String>>>()
-            .ok_or("Error reading args")?;
+            .collect::<Vec<Value>>();
         self.on_notify(ev_name, index, args);
         Ok(())
     }
@@ -142,11 +140,8 @@ impl Subscriptions {
             .args
             .iter()
             .map(|arg| nvim.nvim().unwrap().eval(arg))
-            .map(|res| {
-                res.ok()
-                    .and_then(|val| val.as_str().map(|s: &str| s.to_owned()))
-            })
-            .collect::<Option<Vec<String>>>();
+            .map(|res| res.ok())
+            .collect::<Option<Vec<Value>>>();
         if let Some(args) = args {
             self.on_notify(&handle.event_name, handle.index, args);
         } else {

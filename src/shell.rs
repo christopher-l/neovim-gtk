@@ -340,7 +340,7 @@ impl State {
 
     pub fn subscribe<F>(&self, event_name: &str, args: &[&str], cb: F) -> SubscriptionHandle
     where
-        F: Fn(Vec<String>) + 'static,
+        F: Fn(Vec<Value>) + 'static,
     {
         self.subscriptions
             .borrow_mut()
