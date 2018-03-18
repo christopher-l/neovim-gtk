@@ -161,7 +161,9 @@ impl BufferList {
             "DirChanged",
             &["getcwd()", "getbufinfo()"],
             clone!(list => move |args| {
+                println!("DirChanged");
                 let cwd = &args[0];
+                println!("changing into: {:?}", cwd);
                 let cwd = Path::new(cwd.as_str().unwrap());
                 let buf_info = &args[1];
                 let buffers = read_buffer_list(buf_info);
@@ -245,6 +247,7 @@ fn on_buf_add(
     if let Some(buffer) = buffers.into_iter().find(|buffer| {
         !stored_buffers.iter().any(|stored_buffer| stored_buffer == buffer)
     }) {
+        println!("adding buffer: {:?}", buffer);
         add_row(list, Rc::clone(nvim_ref), &buffer, cwd);
         stored_buffers.push(buffer);
     } else {
@@ -275,11 +278,14 @@ fn on_buf_delete(
     }
     if let Some(index) = index {
         list.remove(&rows[index]);
+        println!("deleting buffer: {:?}", stored_buffers[index]);
         stored_buffers.remove(index);
         if !pane_state.was_dragged {
             update_pane_position(paned, pane_state, rows.len() - 1);
         }
     } else {
+        println!("buffers: {:?}", buffers);
+        println!("stored_buffers: {:?}", stored_buffers);
         error!("Failed to remove deleted buffer from buffer list.")
     }
 }
@@ -294,6 +300,8 @@ fn on_buf_enter(
             let row = row.clone().downcast::<gtk::ListBoxRow>().unwrap();
             list.select_row(&row);
         }
+    } else {
+        list.unselect_all();
     }
 }
 
@@ -353,6 +361,7 @@ fn add_row(list: &gtk::ListBox, nvim_ref: Rc<NeovimClient>, buffer: &Buffer, cwd
     let close_btn: gtk::Button = builder.get_object("close_btn").unwrap();
     label.set_label(&get_buffer_name(&buffer.filename, cwd));
     list.add(&row);
+    row.set_tooltip_text(&*buffer.filename);
     row.show();
     let buffer_number = buffer.number;
     close_btn.connect_clicked(move |_| {

@@ -1,7 +1,7 @@
 .close-button {
   border: none;
   border-radius: 0px;
-  padding: 0px 6px;
+  padding: 0px 2px;
 }
 
 .close-button:not(:hover) {
