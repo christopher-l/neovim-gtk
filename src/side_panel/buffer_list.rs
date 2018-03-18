@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use glib;
 use gtk;
 use gtk::prelude::*;
 
@@ -10,6 +11,7 @@ use neovim_lib::{NeovimApi, NeovimApiAsync, Value};
 use aux::{get_buffer_name};
 use nvim::{ErrorReport, NeovimClient};
 use shell;
+use ui::UiMutex;
 
 #[derive(Debug, Default, PartialEq)]
 struct Buffer {
@@ -107,34 +109,37 @@ impl BufferList {
             clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move |_| {
                 println!("BufDelete");
                 // BufDelete is triggered before the buffer is deleted, so wait for a cycle.
-                gtk::idle_add(
-                    clone!(nvim_ref, list, paned, pane_state_ref, stored_buffers_ref => move || {
-                        let mut nvim = nvim_ref.nvim().unwrap();
-                        match nvim.eval("getbufinfo()") {
-                            Ok(buf_info) => {
-                                let buffers = read_buffer_list(&buf_info);
-                                let mut stored_buffers = stored_buffers_ref.borrow_mut();
-                                if buffers.len() == stored_buffers.len() {
-                                    // The buffer is still there, wait another cycle.
-                                    gtk::Continue(true)
-                                } else {
-                                    on_buf_delete(
-                                        &list,
-                                        &paned,
-                                        &mut pane_state_ref.borrow_mut(),
-                                        &buffers,
-                                        &mut stored_buffers,
-                                    );
-                                    gtk::Continue(false)
-                                }
+                let mut data = Some(UiMutex::new((
+                    list.clone(),
+                    paned.clone(),
+                    pane_state_ref.clone(),
+                    stored_buffers_ref.clone(),
+                )));
+                nvim_ref.nvim().unwrap().eval_async("getbufinfo()").cb(move |value| {
+                    glib::idle_add(move || {
+                        match value {
+                            Ok(ref buf_info) => {
+                                let data = data.take().unwrap();
+                                let (
+                                    ref list,
+                                    ref paned,
+                                    ref pane_state_ref,
+                                    ref stored_buffers_ref
+                                ) = *data.borrow_mut();
+                                let buffers = read_buffer_list(buf_info);
+                                on_buf_delete(
+                                    &list,
+                                    &paned,
+                                    &mut pane_state_ref.borrow_mut(),
+                                    &buffers,
+                                    &mut stored_buffers_ref.borrow_mut(),
+                                );
                             }
-                            Err(err) => {
-                                error!("Couldn't get bufinfo: {}", err);
-                                gtk::Continue(false)
-                            }
+                            Err(ref err) => error!("Couldn't get bufinfo: {}", err),
                         }
-                    })
-                );
+                        glib::Continue(false)
+                    });
+                }).call();
             }),
         );
 
